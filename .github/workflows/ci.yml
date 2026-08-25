@@ -30,10 +30,10 @@ jobs:
             fi
           fi
 
-          # Clamp to 0–300s to avoid accidental long waits
-          if [ "$DELAY" -gt 300 ]; then
-            echo "::warning::Delay $DELAY exceeds 300s cap — clamping to 300s"
-            DELAY=300
+          # Clamp to 0–600s (10 min) to avoid accidental long waits
+          if [ "$DELAY" -gt 600 ]; then
+            echo "::warning::Delay $DELAY exceeds 600s cap — clamping to 600s"
+            DELAY=600
           fi
           if [ "$DELAY" -lt 0 ]; then
             DELAY=0

@@ -24,22 +24,22 @@ DELAY=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --delay)
-      if [[ $# -lt 2 ]]; then echo "error: --delay requires a value (seconds, 0-300)" >&2; exit 1; fi
+      if [[ $# -lt 2 ]]; then echo "error: --delay requires a value (seconds, 0-600)" >&2; exit 1; fi
       DELAY="$2"
       if ! [[ "$DELAY" =~ ^[0-9]+$ ]]; then
-        echo "error: --delay must be an integer 0-300, got: $DELAY" >&2
+        echo "error: --delay must be an integer 0-600, got: $DELAY" >&2
         exit 1
       fi
-      if (( DELAY > 300 )); then
-        echo "error: --delay must be 0-300, got: $DELAY" >&2
+      if (( DELAY > 600 )); then
+        echo "error: --delay must be 0-600, got: $DELAY" >&2
         exit 1
       fi
       shift 2
       ;;
     --delay=*)
       DELAY="${1#--delay=}"
-      if ! [[ "$DELAY" =~ ^[0-9]+$ ]] || (( DELAY > 300 )); then
-        echo "error: --delay must be 0-300, got: $DELAY" >&2
+      if ! [[ "$DELAY" =~ ^[0-9]+$ ]] || (( DELAY > 600 )); then
+        echo "error: --delay must be 0-600, got: $DELAY" >&2
         exit 1
       fi
       shift

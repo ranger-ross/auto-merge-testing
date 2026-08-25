@@ -34,9 +34,8 @@ gh api -X PUT repos/ranger-ross/auto-merge-testing/branches/main/protection \
 `.github/workflows/ci.yml` — single required job `ci`:
 
 - Runs on `pull_request` → `main` (and pushes to `main`)
-- Delay is **configurable** (default 15s) so you can see `auto-merge` queued state:
-  - Add `[delay=N]` or `[delay=N s]` to the commit message (e.g. `[delay=0]`, `[delay=60s]`, `[delay: 30]`, `[delay 10]`) — first match wins, capped at 300s
-  - No marker → 15s default; `[delay=0]` → instant pass
+  - Add `[delay=N]` or `[delay=N s]` to the commit message (e.g. `[delay=0]`, `[delay=60s]`, `[delay: 30]`, `[delay 10]`) — first match wins, capped at 600s (10 min)
+  - No marker → 15s default; `[delay=0]` → instant pass; `[delay=600]` → 10 min max
 - Fails if commit message contains `[fail-ci]` (for negative testing)
 - Passes otherwise
 
@@ -107,8 +106,7 @@ gh pr list --limit 5
 ## Options
 
 ```bash
-./scripts/new-pr.sh --help
-./scripts/new-pr.sh --delay 0                # 0-300s, default 15
+./scripts/new-pr.sh --delay 0                # 0-600s, default 15
 ./scripts/new-pr.sh --delay 30 --fail        # failing with custom delay
 ./scripts/new-pr.sh --no-auto                # create PR without enabling auto-merge
 ./scripts/new-pr.sh --merge merge            # use merge commit instead of squash
@@ -146,8 +144,8 @@ git branch -D test/auto-merge-... 2>/dev/null; git push origin --delete test/aut
 ## Files
 
 ```
-.github/workflows/ci.yml   required check (configurable delay via [delay=N], 15s default, [fail-ci] to fail)
-scripts/new-pr.sh          one-command PR + auto-merge (--delay 0-300, --fail, --merge, --no-auto)
+.github/workflows/ci.yml   required check (configurable delay via [delay=N], 15s default, capped at 600s, [fail-ci] to fail)
+scripts/new-pr.sh          one-command PR + auto-merge (--delay 0-600, --fail, --merge, --no-auto)
 scripts/test-matrix.sh     passing + fast + failing PR matrix
 .auto-merge-test           bump file (commits touch this)
 ```
