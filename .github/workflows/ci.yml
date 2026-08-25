@@ -12,15 +12,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Simulate work (15s delay)
+      - name: Simulate work (configurable delay)
         run: |
-          echo "Running CI checks..."
+          COMMIT_MSG=$(git log -1 --pretty=%B)
           echo "Commit: $(git log -1 --pretty=%H)"
-          echo "Message: $(git log -1 --pretty=%B)"
-          sleep 15
+          echo "Message: $COMMIT_MSG"
+
+          # Default delay (seconds) when no marker is present
+          DELAY=15
+
+          # Parse [delay=N] / [delay=N s] / [delay: N] / [delay N] from commit message
+          # Examples: [delay=0] [delay=30s] [delay: 60] [delay 10] — first match wins
+          if echo "$COMMIT_MSG" | grep -qE '\[delay[=: ]*[0-9]+s?\]'; then
+            EXTRACTED=$(echo "$COMMIT_MSG" | grep -oE '\[delay[=: ]*[0-9]+s?\]' | grep -oE '[0-9]+' | head -1)
+            if [ -n "$EXTRACTED" ]; then
+              DELAY="$EXTRACTED"
+            fi
+          fi
+
+          # Clamp to 0–300s to avoid accidental long waits
+          if [ "$DELAY" -gt 300 ]; then
+            echo "::warning::Delay $DELAY exceeds 300s cap — clamping to 300s"
+            DELAY=300
+          fi
+          if [ "$DELAY" -lt 0 ]; then
+            DELAY=0
+          fi
+
+          echo "Sleeping ${DELAY}s before result..."
+          sleep "$DELAY"
+
           echo "Checking for [fail-ci] marker..."
-          if git log -1 --pretty=%B | grep -q "\[fail-ci\]"; then
+          if echo "$COMMIT_MSG" | grep -q "\[fail-ci\]"; then
             echo "::error::Failing CI as requested via [fail-ci] in commit message"
             exit 1
           fi
-          echo "✅ CI passed"
+          echo "✅ CI passed (delay was ${DELAY}s)"

@@ -4,7 +4,9 @@ set -euo pipefail
 # new-pr.sh — create a test PR with auto-merge enabled
 #
 # Usage:
-#   ./scripts/new-pr.sh                  # passing PR (auto-merges after ~15s)
+#   ./scripts/new-pr.sh                  # passing PR (auto-merges after ~15s default)
+#   ./scripts/new-pr.sh --delay 0        # instant CI (0s delay)
+#   ./scripts/new-pr.sh --delay 60       # 60s CI delay
 #   ./scripts/new-pr.sh --fail           # failing PR (blocked, tests failure path)
 #   ./scripts/new-pr.sh --no-auto        # create PR without enabling auto-merge
 #   ./scripts/new-pr.sh --merge squash|merge|rebase
@@ -17,9 +19,31 @@ FAIL_CI=false
 AUTO_MERGE=true
 TITLE=""
 BODY=""
+DELAY=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --delay)
+      if [[ $# -lt 2 ]]; then echo "error: --delay requires a value (seconds, 0-300)" >&2; exit 1; fi
+      DELAY="$2"
+      if ! [[ "$DELAY" =~ ^[0-9]+$ ]]; then
+        echo "error: --delay must be an integer 0-300, got: $DELAY" >&2
+        exit 1
+      fi
+      if (( DELAY > 300 )); then
+        echo "error: --delay must be 0-300, got: $DELAY" >&2
+        exit 1
+      fi
+      shift 2
+      ;;
+    --delay=*)
+      DELAY="${1#--delay=}"
+      if ! [[ "$DELAY" =~ ^[0-9]+$ ]] || (( DELAY > 300 )); then
+        echo "error: --delay must be 0-300, got: $DELAY" >&2
+        exit 1
+      fi
+      shift
+      ;;
     --fail) FAIL_CI=true; shift ;;
     --no-auto) AUTO_MERGE=false; shift ;;
     --merge) MERGE_METHOD="$2"; shift 2 ;;
@@ -49,11 +73,24 @@ if [[ -z "$TITLE" ]]; then
   fi
 fi
 
+# Build commit message — include delay/fail markers so CI can parse them
+COMMIT_MSG="$TITLE"
+if [[ -n "$DELAY" ]]; then
+  COMMIT_MSG="$COMMIT_MSG [delay=${DELAY}]"
+fi
+if [[ "$FAIL_CI" == true ]]; then
+  COMMIT_MSG="$COMMIT_MSG [fail-ci]"
+fi
+
 if [[ -z "$BODY" ]]; then
+  DELAY_DESC="${DELAY:-15 (default)}"
+  if [[ -n "$DELAY" ]]; then
+    DELAY_DESC="${DELAY}s (via [delay=${DELAY}])"
+  fi
   BODY="Automated test PR for auto-merge.
 
 - Branch: \`$BRANCH\`
-- CI: ${FAIL_CI:+failing (contains [fail-ci])}${FAIL_CI:-passing (15s delay)}
+- CI: ${FAIL_CI:+failing (contains [fail-ci])}${FAIL_CI:-passing} — delay ${DELAY_DESC}
 - Auto-merge: $AUTO_MERGE ($MERGE_METHOD)
 
 Created by \`scripts/new-pr.sh\` at $TIMESTAMP"
@@ -74,10 +111,6 @@ echo "$TIMESTAMP" >> .auto-merge-test
 sort -u .auto-merge-test -o .auto-merge-test
 git add .auto-merge-test
 
-COMMIT_MSG="$TITLE"
-if [[ "$FAIL_CI" == true ]]; then
-  COMMIT_MSG="$COMMIT_MSG [fail-ci]"
-fi
 git commit -m "$COMMIT_MSG" -q
 
 echo "Pushing $BRANCH..."
@@ -98,7 +131,11 @@ sleep 2
 if [[ "$AUTO_MERGE" == true ]]; then
   echo "Enabling auto-merge ($MERGE_METHOD)..."
   if gh pr merge --auto --"$MERGE_METHOD" --delete-branch "$BRANCH" 2>&1; then
-    echo "✅ Auto-merge enabled ($MERGE_METHOD) — will merge when CI passes (~15s)"
+    if [[ -n "$DELAY" ]]; then
+      echo "✅ Auto-merge enabled ($MERGE_METHOD) — will merge when CI passes (~${DELAY}s)"
+    else
+      echo "✅ Auto-merge enabled ($MERGE_METHOD) — will merge when CI passes (~15s default)"
+    fi
   else
     echo "⚠️  Failed to enable auto-merge — check branch protection / CI status"
     echo "   Try manually: gh pr merge --auto --$MERGE_METHOD $BRANCH"

@@ -1,6 +1,6 @@
 # auto-merge-testing
 
-Empty repo configured to test GitHub's **auto-merge** feature. `allow_auto_merge` is enabled and `main` is protected with a required `ci` check (15s delay) so you can observe the full auto-merge lifecycle.
+Empty repo configured to test GitHub's **auto-merge** feature. `allow_auto_merge` is enabled and `main` is protected with a required `ci` check (configurable delay, 15s default) so you can observe the full auto-merge lifecycle.
 
 ## Setup
 
@@ -16,8 +16,6 @@ Already configured — nothing to do manually:
 Re-apply protection if needed:
 
 ```bash
-cat .github/protection.json  # not committed; example in README history
-# or re-run:
 gh api -X PUT repos/ranger-ross/auto-merge-testing/branches/main/protection \
   --input <(jq -n '{
     required_status_checks: {strict: true, contexts: ["ci"]},
@@ -36,7 +34,9 @@ gh api -X PUT repos/ranger-ross/auto-merge-testing/branches/main/protection \
 `.github/workflows/ci.yml` — single required job `ci`:
 
 - Runs on `pull_request` → `main` (and pushes to `main`)
-- Sleeps 15s so you can see `auto-merge` queued state
+- Delay is **configurable** (default 15s) so you can see `auto-merge` queued state:
+  - Add `[delay=N]` or `[delay=N s]` to the commit message (e.g. `[delay=0]`, `[delay=60s]`, `[delay: 30]`, `[delay 10]`) — first match wins, capped at 300s
+  - No marker → 15s default; `[delay=0]` → instant pass
 - Fails if commit message contains `[fail-ci]` (for negative testing)
 - Passes otherwise
 
@@ -50,21 +50,33 @@ gh api -X PUT repos/ranger-ross/auto-merge-testing/branches/main/protection \
 # → watch: gh pr checks <branch> --watch
 ```
 
+### Configurable delay
+
+```bash
+./scripts/new-pr.sh --delay 0     # instant CI, merges as fast as possible
+./scripts/new-pr.sh --delay 60    # 60s delay to observe queued state longer
+./scripts/new-pr.sh --delay=5     # alternate syntax
+# also works manually: git commit -m "my change [delay=30]"
+```
+
 ### Failing PR (blocked, never merges)
 
 ```bash
 ./scripts/new-pr.sh --fail
 # commit contains [fail-ci] → CI fails → auto-merge stays queued/blocked
+
+# combine with delay
+./scripts/new-pr.sh --fail --delay 5   # fail after 5s instead of 15s
 ```
 
 ### Manual flow (what the script does)
 
 ```bash
-# create branch + commit
+# create branch + commit (with optional markers)
 git checkout main && git pull
 git checkout -b test/my-feature
 echo "change" >> .auto-merge-test && git add .auto-merge-test
-git commit -m "test: my change"
+git commit -m "test: my change [delay=30]"   # or [delay=0] / [fail-ci]
 git push -u origin HEAD
 
 # open PR
@@ -85,7 +97,7 @@ gh pr view --json autoMergeRequest,mergeStateStatus,statusCheckRollup --jq .
 gh pr checks --watch
 ```
 
-### Test matrix (one passing + one failing PR)
+### Test matrix (passing + fast + failing PRs)
 
 ```bash
 ./scripts/test-matrix.sh
@@ -96,11 +108,13 @@ gh pr list --limit 5
 
 ```bash
 ./scripts/new-pr.sh --help
-./scripts/new-pr.sh --no-auto              # create PR without enabling auto-merge
-./scripts/new-pr.sh --merge merge          # use merge commit instead of squash
+./scripts/new-pr.sh --delay 0                # 0-300s, default 15
+./scripts/new-pr.sh --delay 30 --fail        # failing with custom delay
+./scripts/new-pr.sh --no-auto                # create PR without enabling auto-merge
+./scripts/new-pr.sh --merge merge            # use merge commit instead of squash
 ./scripts/new-pr.sh --merge rebase
 ./scripts/new-pr.sh --title "custom" --body "details"
-./scripts/new-pr.sh --fail --no-auto       # failing PR without auto-merge
+./scripts/new-pr.sh --fail --no-auto         # failing PR without auto-merge
 ```
 
 ## Verifying auto-merge
@@ -132,8 +146,8 @@ git branch -D test/auto-merge-... 2>/dev/null; git push origin --delete test/aut
 ## Files
 
 ```
-.github/workflows/ci.yml   required check (15s, [fail-ci] to fail)
-scripts/new-pr.sh          one-command PR + auto-merge
-scripts/test-matrix.sh     passing + failing PR matrix
+.github/workflows/ci.yml   required check (configurable delay via [delay=N], 15s default, [fail-ci] to fail)
+scripts/new-pr.sh          one-command PR + auto-merge (--delay 0-300, --fail, --merge, --no-auto)
+scripts/test-matrix.sh     passing + fast + failing PR matrix
 .auto-merge-test           bump file (commits touch this)
 ```
