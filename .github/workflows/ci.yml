@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
 
+jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
@@ -80,4 +81,3 @@ on:
             exit 1
           fi
           echo "✅ CI passed (delay was ${DELAY}s)"
-
