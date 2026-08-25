@@ -87,10 +87,15 @@ if [[ -z "$BODY" ]]; then
   if [[ -n "$DELAY" ]]; then
     DELAY_DESC="${DELAY}s (via [delay=${DELAY}])"
   fi
+  if [[ "$FAIL_CI" == true ]]; then
+    CI_STATUS="failing (contains [fail-ci])"
+  else
+    CI_STATUS="passing"
+  fi
   BODY="Automated test PR for auto-merge.
 
 - Branch: \`$BRANCH\`
-- CI: ${FAIL_CI:+failing (contains [fail-ci])}${FAIL_CI:-passing} — delay ${DELAY_DESC}
+- CI: $CI_STATUS — delay ${DELAY_DESC}
 - Auto-merge: $AUTO_MERGE ($MERGE_METHOD)
 
 Created by \`scripts/new-pr.sh\` at $TIMESTAMP"
