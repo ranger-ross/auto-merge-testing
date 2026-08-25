@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Simulate work (15s delay)
+        run: |
+          echo "Running CI checks..."
+          echo "Commit: $(git log -1 --pretty=%H)"
+          echo "Message: $(git log -1 --pretty=%B)"
+          sleep 15
+          echo "Checking for [fail-ci] marker..."
+          if git log -1 --pretty=%B | grep -q "\[fail-ci\]"; then
+            echo "::error::Failing CI as requested via [fail-ci] in commit message"
+            exit 1
+          fi
+          echo "✅ CI passed"
