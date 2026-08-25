@@ -6,25 +6,57 @@ on:
   push:
     branches: [main]
 
-jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Simulate work (configurable delay)
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          echo "Commit: $(git log -1 --pretty=%H)"
-          echo "Message: $COMMIT_MSG"
+          # Collect commit messages from all relevant sources:
+          # - HEAD (merge commit for PRs)
+          # - HEAD^2 (PR head for pull_request merges)
+          # - origin/main..HEAD (all PR commits)
+          # - PR title/body (fallback if marker only in PR)
+          COMMIT_MSGS=""
+          COMMIT_MSGS="$(git log -1 --pretty=%B 2>/dev/null || true)"
+          if git rev-parse HEAD^2 >/dev/null 2>&1; then
+            COMMIT_MSGS="$COMMIT_MSGS
+          $(git log -1 --pretty=%B HEAD^2 2>/dev/null || true)"
+          fi
+          if git rev-parse origin/main >/dev/null 2>&1; then
+            RANGE_MSGS="$(git log origin/main..HEAD --pretty=%B 2>/dev/null || true)"
+            if [ -n "$RANGE_MSGS" ]; then
+              COMMIT_MSGS="$COMMIT_MSGS
+          $RANGE_MSGS"
+            fi
+          fi
+          # PR title/body may contain markers (e.g. [delay=600] in title)
+          if [ -n "${PR_TITLE:-}" ]; then
+            COMMIT_MSGS="$COMMIT_MSGS
+          $PR_TITLE"
+          fi
+          if [ -n "${PR_BODY:-}" ]; then
+            COMMIT_MSGS="$COMMIT_MSGS
+          $PR_BODY"
+          fi
+
+          echo "Commit messages considered:"
+          echo "$COMMIT_MSGS"
+          echo "---"
 
           # Default delay (seconds) when no marker is present
           DELAY=15
 
-          # Parse [delay=N] / [delay=N s] / [delay: N] / [delay N] from commit message
+          # Parse [delay=N] / [delay=N s] / [delay: N] / [delay N] from any commit message
           # Examples: [delay=0] [delay=30s] [delay: 60] [delay 10] — first match wins
-          if echo "$COMMIT_MSG" | grep -qE '\[delay[=: ]*[0-9]+s?\]'; then
-            EXTRACTED=$(echo "$COMMIT_MSG" | grep -oE '\[delay[=: ]*[0-9]+s?\]' | grep -oE '[0-9]+' | head -1)
+          if echo "$COMMIT_MSGS" | grep -qE '\[delay[=: ]*[0-9]+s?\]'; then
+            EXTRACTED=$(echo "$COMMIT_MSGS" | grep -oE '\[delay[=: ]*[0-9]+s?\]' | grep -oE '[0-9]+' | head -1)
             if [ -n "$EXTRACTED" ]; then
               DELAY="$EXTRACTED"
             fi
@@ -43,8 +75,9 @@ jobs:
           sleep "$DELAY"
 
           echo "Checking for [fail-ci] marker..."
-          if echo "$COMMIT_MSG" | grep -q "\[fail-ci\]"; then
+          if echo "$COMMIT_MSGS" | grep -q "\[fail-ci\]"; then
             echo "::error::Failing CI as requested via [fail-ci] in commit message"
             exit 1
           fi
           echo "✅ CI passed (delay was ${DELAY}s)"
+
